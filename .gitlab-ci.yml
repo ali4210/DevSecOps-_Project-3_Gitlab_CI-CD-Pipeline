@@ -147,28 +147,26 @@ deploy-staging:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
 
-# ─────────────────────────────────────────
-# STAGE 6: ZAP DYNAMIC SECURITY TESTING
-# ─────────────────────────────────────────
 zap-security-test:
   stage: security-test
   image: zaproxy/zap-stable:latest
   script:
     - mkdir -p /zap/wrk
-    - echo "Waiting for staging app to be ready..."
-    - sleep 30
-    - |
-      zap-baseline.py \
-        -t http://staging-app:3000 \
-        -J /zap/wrk/zap-report.json \
-        -r /zap/wrk/zap-report.html \
+    - echo "Running ZAP baseline scan against production app..."
+    - zap-baseline.py
+        -t http://192.168.0.150:3002
+        -J /zap/wrk/zap-report.json
+        -r /zap/wrk/zap-report.html
         -I || true
-    - cp /zap/wrk/zap-report.* . || true
+    - cp /zap/wrk/zap-report.html ./zap-report.html || true
+    - cp /zap/wrk/zap-report.json ./zap-report.json || true
+    - ls -lh zap-report.* || echo "No reports generated"
   artifacts:
     paths:
       - zap-report.html
       - zap-report.json
     expire_in: 1 week
+    when: always
   needs:
     - deploy-staging
   allow_failure: true
