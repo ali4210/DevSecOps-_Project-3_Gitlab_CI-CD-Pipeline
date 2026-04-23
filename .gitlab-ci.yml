@@ -68,6 +68,7 @@ dependency-check:
       --format HTML
       --format JSON
       --out "$CI_PROJECT_DIR/dependency-check-report"
+      --nvdApiKey "$NVD_API_KEY"
       --disableYarnAudit
       --disableNodeAudit || true
     - ls -lh $CI_PROJECT_DIR/dependency-check-report/
