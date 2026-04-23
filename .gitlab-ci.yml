@@ -128,24 +128,19 @@ quality-gate:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
 
-# ─────────────────────────────────────────
-# STAGE 5: DEPLOY TO STAGING
-# ─────────────────────────────────────────
 deploy-staging:
   stage: deploy-staging
   image: docker:24
-  services:
-    - docker:24-dind
   script:
     - echo "Building Docker image for staging..."
     - docker build -t ${CI_PROJECT_NAME}:staging .
     - docker stop staging-app || true
     - docker rm staging-app || true
     - docker run -d --name staging-app -p 3001:3000 ${CI_PROJECT_NAME}:staging
-    - echo "Staging deployed at http://localhost:3001"
+    - echo "Staging deployed at http://192.168.0.150:3001"
   environment:
     name: staging
-    url: http://localhost:3001
+    url: http://192.168.0.150:3001
   needs:
     - build
   allow_failure: true
@@ -186,15 +181,13 @@ zap-security-test:
 deploy-production:
   stage: deploy-production
   image: docker:24
-  services:
-    - docker:24-dind
   script:
     - echo "Building Docker image for production..."
     - docker build -t ${CI_PROJECT_NAME}:production .
     - docker stop production-app || true
     - docker rm production-app || true
     - docker run -d --name production-app -p 3002:3000 ${CI_PROJECT_NAME}:production
-    - echo "Production deployed at http://localhost:3000"
+    - echo "Production deployed at http://192.168.0.150:3002"
   environment:
     name: production
     url: http://192.168.0.150:3002
