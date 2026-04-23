@@ -68,7 +68,6 @@ dependency-check:
       --format HTML
       --format JSON
       --out "$CI_PROJECT_DIR/dependency-check-report"
-      --noupdate
       --disableYarnAudit
       --disableNodeAudit || true
     - ls -lh $CI_PROJECT_DIR/dependency-check-report/
