@@ -193,11 +193,11 @@ deploy-production:
     - docker build -t ${CI_PROJECT_NAME}:production .
     - docker stop production-app || true
     - docker rm production-app || true
-    - docker run -d --name production-app -p 3000:3000 ${CI_PROJECT_NAME}:production
+    - docker run -d --name production-app -p 3002:3000 ${CI_PROJECT_NAME}:production
     - echo "Production deployed at http://localhost:3000"
   environment:
     name: production
-    url: http://localhost:3000
+    url: http://192.168.0.150:3002
   needs:
     - zap-security-test
   when: manual
