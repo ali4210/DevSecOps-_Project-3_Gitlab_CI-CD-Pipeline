@@ -57,11 +57,12 @@ unit-tests:
 # OWASP Dependency Check
 dependency-check:
   stage: security-scan
-  image: owasp/dependency-check:latest
+  image:
+    name: owasp/dependency-check:latest
+    entrypoint: [""]
   script:
     - mkdir -p $CI_PROJECT_DIR/dependency-check-report
-    - >
-      /usr/share/dependency-check/bin/dependency-check.sh
+    - /usr/share/dependency-check/bin/dependency-check.sh
       --project "$CI_PROJECT_NAME"
       --scan "$CI_PROJECT_DIR"
       --format HTML
@@ -70,7 +71,7 @@ dependency-check:
       --noupdate
       --disableYarnAudit
       --disableNodeAudit || true
-    - ls -lh $CI_PROJECT_DIR/dependency-check-report/ || echo "No report files"
+    - ls -lh $CI_PROJECT_DIR/dependency-check-report/
   artifacts:
     paths:
       - dependency-check-report/
@@ -158,7 +159,8 @@ zap-security-test:
     - mkdir -p /zap/wrk
     - ln -s $CI_PROJECT_DIR /zap/wrk/project
     - echo "Running ZAP baseline scan against production app..."
-    - zap-baseline.py -t http://192.168.0.150:3002 -r zap-report.html -J zap-report.json -I || true
+    - zap-baseline.py -t http://192.168.0.150:3002 -r zap-report.html -J zap-report.json -m 5 -T 3 -I || true
+   # - zap-baseline.py -t http://192.168.0.150:3002 -r zap-report.html -J zap-report.json -I || true
     - cp /zap/wrk/zap-report.html $CI_PROJECT_DIR/zap-report.html || true
     - cp /zap/wrk/zap-report.json $CI_PROJECT_DIR/zap-report.json || true
   artifacts:
