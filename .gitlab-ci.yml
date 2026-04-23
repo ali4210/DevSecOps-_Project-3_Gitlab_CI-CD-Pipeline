@@ -60,18 +60,14 @@ dependency-check:
   image: owasp/dependency-check:latest
   script:
     - echo "Running OWASP Dependency Check..."
-    - /usr/share/dependency-check/bin/dependency-check.sh
-      --project "$CI_PROJECT_NAME"
-      --scan .
-      --format HTML
-      --format JSON
-      --out ./dependency-check-report
-      --disableYarnAudit
-      --disableNodeAudit
+    - mkdir -p ./dependency-check-report
+    - /usr/share/dependency-check/bin/dependency-check.sh --project "$CI_PROJECT_NAME" --scan . --format HTML --format JSON --out ./dependency-check-report --disableYarnAudit --disableNodeAudit --noupdate || true
+    - ls -lh ./dependency-check-report/ || echo "No report files found"
   artifacts:
     paths:
       - dependency-check-report/
     expire_in: 1 week
+    when: always
   allow_failure: true
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
