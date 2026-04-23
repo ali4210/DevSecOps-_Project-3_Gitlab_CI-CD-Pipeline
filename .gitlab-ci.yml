@@ -59,10 +59,18 @@ dependency-check:
   stage: security-scan
   image: owasp/dependency-check:latest
   script:
-    - echo "Running OWASP Dependency Check..."
-    - mkdir -p ./dependency-check-report
-    - /usr/share/dependency-check/bin/dependency-check.sh --project "$CI_PROJECT_NAME" --scan . --format HTML --format JSON --out ./dependency-check-report --disableYarnAudit --disableNodeAudit --noupdate || true
-    - ls -lh ./dependency-check-report/ || echo "No report files found"
+    - mkdir -p $CI_PROJECT_DIR/dependency-check-report
+    - >
+      /usr/share/dependency-check/bin/dependency-check.sh
+      --project "$CI_PROJECT_NAME"
+      --scan "$CI_PROJECT_DIR"
+      --format HTML
+      --format JSON
+      --out "$CI_PROJECT_DIR/dependency-check-report"
+      --noupdate
+      --disableYarnAudit
+      --disableNodeAudit || true
+    - ls -lh $CI_PROJECT_DIR/dependency-check-report/ || echo "No report files"
   artifacts:
     paths:
       - dependency-check-report/
@@ -148,15 +156,11 @@ zap-security-test:
   image: zaproxy/zap-stable:latest
   script:
     - mkdir -p /zap/wrk
+    - ln -s $CI_PROJECT_DIR /zap/wrk/project
     - echo "Running ZAP baseline scan against production app..."
-    - zap-baseline.py
-        -t http://192.168.0.150:3002
-        -J /zap/wrk/zap-report.json
-        -r /zap/wrk/zap-report.html
-        -I || true
-    - cp /zap/wrk/zap-report.html ./zap-report.html || true
-    - cp /zap/wrk/zap-report.json ./zap-report.json || true
-    - ls -lh zap-report.* || echo "No reports generated"
+    - zap-baseline.py -t http://192.168.0.150:3002 -r zap-report.html -J zap-report.json -I || true
+    - cp /zap/wrk/zap-report.html $CI_PROJECT_DIR/zap-report.html || true
+    - cp /zap/wrk/zap-report.json $CI_PROJECT_DIR/zap-report.json || true
   artifacts:
     paths:
       - zap-report.html
@@ -168,6 +172,7 @@ zap-security-test:
   allow_failure: true
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
+
 
 # ─────────────────────────────────────────
 # STAGE 7: DEPLOY TO PRODUCTION (Manual)
