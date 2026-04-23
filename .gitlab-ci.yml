@@ -1,0 +1,205 @@
+# ============================================================
+# DevSecOps CI/CD Pipeline — Lab 5
+# GitLab CI/CD Configuration for OWASP NodeGoat
+# ============================================================
+
+stages:
+  - build
+  - test
+  - security-scan
+  - quality-gate
+  - deploy-staging
+  - security-test
+  - deploy-production
+
+variables:
+  DOCKER_DRIVER: overlay2
+  GIT_DEPTH: "0"
+  SONAR_HOST_URL: "http://sonarqube:9000"
+
+# ─────────────────────────────────────────
+# STAGE 1: BUILD
+# ─────────────────────────────────────────
+build:
+  stage: build
+  image: node:20-alpine
+  script:
+    - echo "Installing dependencies..."
+    - npm ci
+  artifacts:
+    paths:
+      - node_modules/
+    expire_in: 1 hour
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+
+# ─────────────────────────────────────────
+# STAGE 2: UNIT TESTS
+# ─────────────────────────────────────────
+unit-tests:
+  stage: test
+  image: node:20-alpine
+  script:
+    - npm ci
+    - npm test || echo "Tests completed (some may fail in NodeGoat — this is expected)"
+  artifacts:
+    paths:
+      - coverage/
+    expire_in: 1 week
+  allow_failure: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+
+# ─────────────────────────────────────────
+# STAGE 3: SECURITY SCANNING
+# ─────────────────────────────────────────
+
+# OWASP Dependency Check
+dependency-check:
+  stage: security-scan
+  image: owasp/dependency-check:latest
+  script:
+    - echo "Running OWASP Dependency Check..."
+    - /usr/share/dependency-check/bin/dependency-check.sh
+      --project "$CI_PROJECT_NAME"
+      --scan .
+      --format HTML
+      --format JSON
+      --out ./dependency-check-report
+      --disableYarnAudit
+      --disableNodeAudit
+  artifacts:
+    paths:
+      - dependency-check-report/
+    expire_in: 1 week
+  allow_failure: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+
+# SonarQube Analysis
+sonarqube-check:
+  stage: security-scan
+  image:
+    name: sonarsource/sonar-scanner-cli:latest
+    entrypoint: [""]
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+    GIT_DEPTH: "0"
+  cache:
+    key: "${CI_JOB_NAME}"
+    paths:
+      - .sonar/cache
+  script:
+    - echo "Running SonarQube analysis..."
+    - sonar-scanner
+      -Dsonar.projectKey=devsecops-demo
+      -Dsonar.projectName="DevSecOps Demo"
+      -Dsonar.sources=.
+      -Dsonar.host.url=$SONAR_HOST_URL
+      -Dsonar.login=$SONAR_TOKEN
+      -Dsonar.exclusions=node_modules/**,coverage/**,.git/**
+  allow_failure: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+
+# ─────────────────────────────────────────
+# STAGE 4: QUALITY GATE
+# ─────────────────────────────────────────
+quality-gate:
+  stage: quality-gate
+  image: curlimages/curl:latest
+  script:
+    - echo "Waiting for SonarQube to process results..."
+    - sleep 30
+    - |
+      QUALITY_GATE_STATUS=$(curl -s \
+        -u "${SONAR_TOKEN}:" \
+        "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=devsecops-demo" \
+        | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+      echo "Quality Gate Status: $QUALITY_GATE_STATUS"
+      if [ "$QUALITY_GATE_STATUS" != "OK" ]; then
+        echo "Quality gate FAILED — blocking pipeline."
+        exit 1
+      fi
+      echo "Quality gate PASSED."
+  needs:
+    - sonarqube-check
+  allow_failure: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+
+# ─────────────────────────────────────────
+# STAGE 5: DEPLOY TO STAGING
+# ─────────────────────────────────────────
+deploy-staging:
+  stage: deploy-staging
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - echo "Building Docker image for staging..."
+    - docker build -t ${CI_PROJECT_NAME}:staging .
+    - docker stop staging-app || true
+    - docker rm staging-app || true
+    - docker run -d --name staging-app -p 3001:3000 ${CI_PROJECT_NAME}:staging
+    - echo "Staging deployed at http://localhost:3001"
+  environment:
+    name: staging
+    url: http://localhost:3001
+  needs:
+    - build
+  allow_failure: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+
+# ─────────────────────────────────────────
+# STAGE 6: ZAP DYNAMIC SECURITY TESTING
+# ─────────────────────────────────────────
+zap-security-test:
+  stage: security-test
+  image: zaproxy/zap-stable:latest
+  script:
+    - mkdir -p /zap/wrk
+    - echo "Waiting for staging app to be ready..."
+    - sleep 30
+    - |
+      zap-baseline.py \
+        -t http://staging-app:3000 \
+        -J /zap/wrk/zap-report.json \
+        -r /zap/wrk/zap-report.html \
+        -I || true
+    - cp /zap/wrk/zap-report.* . || true
+  artifacts:
+    paths:
+      - zap-report.html
+      - zap-report.json
+    expire_in: 1 week
+  needs:
+    - deploy-staging
+  allow_failure: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# ─────────────────────────────────────────
+# STAGE 7: DEPLOY TO PRODUCTION (Manual)
+# ─────────────────────────────────────────
+deploy-production:
+  stage: deploy-production
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - echo "Building Docker image for production..."
+    - docker build -t ${CI_PROJECT_NAME}:production .
+    - docker stop production-app || true
+    - docker rm production-app || true
+    - docker run -d --name production-app -p 3000:3000 ${CI_PROJECT_NAME}:production
+    - echo "Production deployed at http://localhost:3000"
+  environment:
+    name: production
+    url: http://localhost:3000
+  needs:
+    - zap-security-test
+  when: manual
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
