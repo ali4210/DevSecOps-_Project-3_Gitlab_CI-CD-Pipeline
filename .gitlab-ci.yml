@@ -54,7 +54,7 @@ unit-tests:
 # STAGE 3: SECURITY SCANNING
 # ─────────────────────────────────────────
 
-# OWASP Dependency Check
+# OWASP Dependency Check — uses pre-downloaded local NVD database (no internet download)
 dependency-check:
   stage: security-scan
   image:
@@ -69,6 +69,7 @@ dependency-check:
       --format JSON
       --out "$CI_PROJECT_DIR/dependency-check-report"
       --nvdApiKey "$NVD_API_KEY"
+      --noupdate
       --disableYarnAudit
       --disableNodeAudit || true
     - ls -lh $CI_PROJECT_DIR/dependency-check-report/
@@ -133,6 +134,9 @@ quality-gate:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
 
+# ─────────────────────────────────────────
+# STAGE 5: DEPLOY STAGING
+# ─────────────────────────────────────────
 deploy-staging:
   stage: deploy-staging
   image: docker:24
@@ -152,6 +156,9 @@ deploy-staging:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
 
+# ─────────────────────────────────────────
+# STAGE 6: ZAP SECURITY TEST
+# ─────────────────────────────────────────
 zap-security-test:
   stage: security-test
   image: zaproxy/zap-stable:latest
@@ -160,7 +167,6 @@ zap-security-test:
     - ln -s $CI_PROJECT_DIR /zap/wrk/project
     - echo "Running ZAP baseline scan against production app..."
     - zap-baseline.py -t http://192.168.0.150:3002 -r zap-report.html -J zap-report.json -m 5 -T 3 -I || true
-   # - zap-baseline.py -t http://192.168.0.150:3002 -r zap-report.html -J zap-report.json -I || true
     - cp /zap/wrk/zap-report.html $CI_PROJECT_DIR/zap-report.html || true
     - cp /zap/wrk/zap-report.json $CI_PROJECT_DIR/zap-report.json || true
   artifacts:
@@ -174,7 +180,6 @@ zap-security-test:
   allow_failure: true
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
-
 
 # ─────────────────────────────────────────
 # STAGE 7: DEPLOY TO PRODUCTION (Manual)
