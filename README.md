@@ -1,163 +1,155 @@
-# NodeGoat
+# 🛡️ DevSecOps CI/CD Pipeline — Project 3
 
-Being lightweight, fast, and scalable, Node.js is becoming a widely adopted platform for developing web applications. This project provides an environment to learn how OWASP Top 10 security risks apply to web applications developed using Node.js and how to effectively address them.
+> **A fully automated, self-hosted 7-stage DevSecOps pipeline built on GitLab CE with SAST, DAST, SCA, and manual production gate.**
 
-## Getting Started
 
-OWASP Top 10 for Node.js web applications:
 
-### Know it!
 
-This application bundled a tutorial page that explains the OWASP Top 10 vulnerabilities and how to fix them.
 
-Once the application is running, you can access the tutorial page at [http://localhost:4000/tutorial](http://localhost:4000/tutorial) (or the port you have configured).
 
-### Do it!
 
-[A Vulnerable Node.js App for Ninjas](http://nodegoat.herokuapp.com/) to exploit, toast, and fix. You may like to [set up your own copy](#how-to-set-up-your-copy-of-nodegoat) of the app to fix and test vulnerabilities. Hint: Look for comments in the source code.
+***
 
-##### Default user accounts
+## 📌 Project Overview
 
-The database comes pre-populated with these user accounts created as part of the seed data -
-* Admin Account - u:`admin` p:`Admin_123`
-* User Accounts (u:`user1` p:`User1_123`), (u:`user2` p:`User2_123`)
-* New users can also be added using the sign-up page.
+This project implements a **complete DevSecOps CI/CD pipeline** for the intentionally vulnerable web application **OWASP NodeGoat**, deployed on a **fully self-hosted infrastructure** running on **Kali Linux**.
 
-## How to Set Up Your Copy of NodeGoat
+Every tool — GitLab CE, GitLab Runner, SonarQube, OWASP Dependency-Check, OWASP ZAP — runs locally on a single machine with no cloud dependency.
 
-### OPTION 1 - Run NodeGoat on your machine
+***
 
-1) Install [Node.js](http://nodejs.org/) - NodeGoat requires Node v8 or above
+## 🏗️ Infrastructure Stack
 
-2) Clone the github repository:
-   ```
-   git clone https://github.com/OWASP/NodeGoat.git
-   ```
+| Component | Tool / Version | Role |
+|---|---|---|
+| OS | Kali Linux (master node) | Host machine |
+| Source Control | GitLab CE (self-hosted) | Git server + CI/CD |
+| CI Runner | GitLab Runner v18.11.1 | Pipeline executor |
+| Containerization | Docker (privileged mode) | Job isolation |
+| Target App | OWASP NodeGoat (Node.js 20) | Vulnerable test application |
+| SAST | SonarQube Community | Static code analysis |
+| SCA | OWASP Dependency-Check | CVE vulnerability scanning |
+| DAST | OWASP ZAP | Live dynamic attack simulation |
+| Registry | GitLab Container Registry | Docker image storage |
 
-3) Go to the directory:
-   ```
-   cd NodeGoat
-   ```
+***
 
-4) Install node packages:
-   ```
-   npm install
-   ```
+## 🔁 Pipeline Stages
 
-5) Set up MongoDB. You can either install MongoDB locally or create a remote instance:
+```
+┌──────────┐   ┌──────────┐   ┌──────────────────┐   ┌────────────┐
+│  BUILD   │ → │   TEST   │ → │ DEPENDENCY-CHECK │ → │  SONARQUBE │
+└──────────┘   └──────────┘   └──────────────────┘   └────────────┘
+                                                              ↓
+┌──────────────┐   ┌──────────────────┐   ┌────────────────────────┐
+│  QUALITY     │ → │  DEPLOY STAGING  │ → │  ZAP DAST SCAN         │
+│  GATE        │   │  (auto)          │   │  (live scan)           │
+└──────────────┘   └──────────────────┘   └────────────────────────┘
+                                                              ↓
+                                              ┌─────────────────────┐
+                                              │  DEPLOY PRODUCTION  │
+                                              │  (manual approval)  │
+                                              └─────────────────────┘
+```
 
-   * Using local MongoDB:
-     1) Install [MongoDB Community Server](https://docs.mongodb.com/manual/administration/install-community/)
-     2) Start [mongod](http://docs.mongodb.org/manual/reference/program/mongod/#bin.mongod)
+### Stage Details
 
-   * Using remote MongoDB instance:
-     1) [Deploy a MongoDB Atlas free tier cluster](https://docs.atlas.mongodb.com/tutorial/deploy-free-tier-cluster/) (M0 Sandbox)
-     2) [Enable network access](https://docs.atlas.mongodb.com/security/add-ip-address-to-list/) to the cluster from your current IP address
-     3) [Add a database user](https://docs.atlas.mongodb.com/tutorial/create-mongodb-user-for-cluster/) to the cluster
-     4) Set the `MONGODB_URI` environment variable to the connection string of your cluster, which can be viewed in the cluster's
-        [connect dialog](https://docs.atlas.mongodb.com/tutorial/connect-to-your-cluster/#connect-to-your-atlas-cluster). Select "Connect your application",
-        set the driver to "Node.js" and the version to "2.2.12 or later". This will give a connection string in the form:
-        ```
-        mongodb://<username>:<password>@<cluster>/<dbname>?ssl=true&replicaSet=<rsname>&authSource=admin&retryWrites=true&w=majority
-        ```
-        The `<username>` and `<password>` fields need filling in with the details of the database user added earlier. The `<dbname>` field sets the name of the
-        database nodegoat will use in the cluster (eg "nodegoat"). The other fields will already be filled in with the correct details for your cluster.
+| # | Stage | Tool | Type | Trigger |
+|---|---|---|---|---|
+| 1 | Build | Node.js 20 Alpine | Compile + Install | Auto |
+| 2 | Unit Test | npm test + coverage | Testing | Auto |
+| 3 | Dependency-Check | OWASP DC (346,335 CVEs) | SCA | Auto |
+| 4 | SAST Analysis | SonarQube | Static Analysis | Auto |
+| 5 | Quality Gate | SonarQube API | Gate Enforcement | Auto |
+| 6 | Deploy Staging | Docker | Staging Deploy | Auto |
+| 7 | DAST Scan | OWASP ZAP | Live Scan | Auto |
+| 8 | Deploy Production | Docker | Production Deploy | **Manual** |
 
-6) Populate MongoDB with the seed data required for the app:
-   ```
-   npm run db:seed
-   ```
-   By default this will use the "development" configuration, but the desired config can be passed as an argument if required.
+***
 
-7) Start the server. You can run the server using node or nodemon:
-   * Start the server with node. This starts the NodeGoat application at [http://localhost:4000/](http://localhost:4000/):
-     ```
-     npm start
-     ```
-   * Start the server with nodemon, which will automatically restart the application when you make any changes. This starts the NodeGoat application at [http://localhost:5000/](http://localhost:5000/):
-     ```
-     npm run dev
-     ```
+## 🔧 Key Configurations
 
-#### Customizing the Default Application Configuration
+### GitLab Runner (`/etc/gitlab-runner/config.toml`)
+- Executor: **Docker (privileged)**
+- Pull policy: `if-not-present`
+- Volume mounts: Docker socket + Dependency-Check NVD database cache
+- Extra hosts: internal GitLab hostname resolution
 
-By default the application will be hosted on port 4000 and will connect to a MongoDB instance at localhost:27017. To change this set the environment variables `PORT` and `MONGODB_URI`.
+### CI/CD Variables (GitLab → Settings → CI/CD)
+```
+SONAR_TOKEN          → SonarQube authentication token
+SONAR_HOST_URL       → http://<host>:9000
+CI_REGISTRY_USER     → GitLab registry username
+CI_REGISTRY_PASSWORD → GitLab registry password
+```
 
-Other settings can be changed by updating the [config file](https://github.com/OWASP/NodeGoat/blob/master/config/env/all.js).
+### OWASP Dependency-Check
+- NVD database: **228MB** local cache at `/home/kali/dependency-check-data/`
+- Mounted into container: `/usr/share/dependency-check/data`
+- Flag used: `--noupdate` to skip re-download on each run
+- CVEs scanned: **346,335**
 
-### OPTION 2 - Run NodeGoat on Docker
+***
 
-The repo includes the Dockerfile and docker-compose.yml necessary to set up the app and db instance, then connect them together.
+## 📁 Repository Structure
 
-1) Install [docker](https://docs.docker.com/installation/) and [docker compose](https://docs.docker.com/compose/install/) 
+```
+devsecops-demo/
+├── .gitlab-ci.yml          # Main pipeline definition (7 stages)
+├── app/                    # OWASP NodeGoat application source
+│   ├── server.js
+│   ├── package.json
+│   └── ...
+├── sonar-project.properties # SonarQube project config
+├── Dockerfile              # Multi-stage Docker build
+└── README.md
+```
 
-2) Clone the github repository:
-   ```
-   git clone https://github.com/OWASP/NodeGoat.git
-   ```
+***
 
-3) Go to the directory:
-   ```
-   cd NodeGoat
-   ```
+## 🚀 How to Reproduce This Project
 
-4) Build the images:
-   ```
-   docker-compose build
-   ```
+### Prerequisites
+- Kali Linux (or Ubuntu) machine with 8GB+ RAM
+- Docker installed and running
+- GitLab CE running at your local IP
+- SonarQube running at port 9000
+- OWASP Dependency-Check NVD database downloaded
 
-5) Run the app, this starts the NodeGoat application at http://localhost:4000/:
-   ```
-   docker-compose up
-   ```
+### Steps
+1. Clone this repo into your GitLab CE instance
+2. Register a GitLab Runner with Docker executor (privileged)
+3. Set CI/CD variables in GitLab project settings
+4. Mount Dependency-Check data volume in runner config
+5. Push to `main` branch — pipeline triggers automatically
+6. Monitor stages in GitLab → CI/CD → Pipelines
 
-### OPTION 3 - Deploy to Heroku
+***
 
-This option uses a free ($0/month) Heroku node server.
+## 📊 Security Findings Summary
 
-Though not essential, it is recommended that you fork this repository and deploy the forked repo.
-This will allow you to fix vulnerabilities in your own forked version, then deploy and test it on Heroku.
+| Tool | Finding Type | Result |
+|---|---|---|
+| OWASP Dependency-Check | Known CVEs in dependencies | Vulnerabilities found (NodeGoat is intentionally vulnerable) |
+| SonarQube | Code smells, bugs, vulnerabilities | Issues detected in NodeGoat source |
+| OWASP ZAP | Live attack simulation | DAST alerts generated from running app |
 
-1) Set up a publicly accessible MongoDB instance:
-   1) [Deploy a MongoDB Atlas free tier cluster](https://docs.atlas.mongodb.com/tutorial/deploy-free-tier-cluster/) (M0 Sandbox)
-   2) [Enable network access](https://docs.atlas.mongodb.com/security/ip-access-list/#add-ip-access-list-entries) to the cluster from anywhere (CIDR range 0.0.0.0/0)
-   3) [Add a database user](https://docs.atlas.mongodb.com/tutorial/create-mongodb-user-for-cluster/) to the cluster
+> ⚠️ **Note:** OWASP NodeGoat is **intentionally vulnerable** by design. All findings are expected and part of the learning exercise.
 
-2) Deploy NodeGoat to Heroku by clicking the button below:
+***
 
-   [![Deploy](https://www.herokucdn.com/deploy/button.png)](https://heroku.com/deploy)
+## 🎓 Course Context
 
-   In the Create New App dialog, set the `MONGODB_URI` config var to the connection string of your MongoDB Atlas cluster.
-   This can be viewed in the cluster's [connect dialog](https://docs.atlas.mongodb.com/tutorial/connect-to-your-cluster/#connect-to-your-atlas-cluster).
-   Select "Connect your application", set the driver to "Node.js" and the version to "2.2.12 or later".
-   This will give a connection string in the form:
-   ```
-   mongodb://<username>:<password>@<cluster>/<dbname>?ssl=true&replicaSet=<rsname>&authSource=admin&retryWrites=true&w=majority
-   ```
-   The `<username>` and `<password>` fields need filling in with the details of the database user added earlier. The `<dbname>` field sets the name of the
-   database nodegoat will use in the cluster (eg "nodegoat"). The other fields will already be filled in with the correct details for your cluster.
+This project was completed as **Lab Project 3** of the **AIOps program** at **Al-Nafi International College** (online).
 
-## Report bugs, Feedback, Comments
+- **Student:** Saleem Ali
+- **Program:** AIOps (Artificial Intelligence Operations)
+- **Institution:** Al-Nafi International College
+- **GitHub:** [github.com/ali4210](https://github.com/ali4210)
+- **LinkedIn:** [linkedin.com/in/saleem-ali-189719325](https://www.linkedin.com/in/saleem-ali-189719325)
 
-*  Open a new [issue](https://github.com/OWASP/NodeGoat/issues) or contact team by joining chat at [Slack](https://owasp.slack.com/messages/project-nodegoat/) or [![Join the chat at https://gitter.im/OWASP/NodeGoat](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/OWASP/NodeGoat?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+***
 
-## Contributing
+## 📜 License
 
-Please Follow [the contributing guide](CONTRIBUTING.md)
-
-## Code Of Conduct (CoC)
-
-This project is bound by a [Code of Conduct](CODE_OF_CONDUCT.md).
-
-## Contributors
-
-Here are the amazing [contributors](https://github.com/OWASP/NodeGoat/graphs/contributors) to the NodeGoat project.
-
-## Supports
-
-- Thanks to JetBrains for providing licenses to fantastic [WebStorm IDE](https://www.jetbrains.com/webstorm/) to build this project.
-
-## License
-
-Code licensed under the [Apache License v2.0.](http://www.apache.org/licenses/LICENSE-2.0)
-# DevSecOps Pipeline - Lab 5
+This project is for educational purposes. OWASP NodeGoat is licensed under the Apache 2.0 License.
